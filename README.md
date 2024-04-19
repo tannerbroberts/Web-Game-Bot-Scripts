@@ -2,9 +2,13 @@ To run the project, just run the following command:
 node src/index.js
 
 TODO:
-Bot remembers where enemy generals are when discovered
-Chaining expansion with an emphasis on a lancing strategy
-Reinforce edges
+
+Helpers:
+Chaining expansion with an emphasis on a lancing strategy that bypasses any normal movement delay
+Reinforce edges of territory
 Reinforce king
-Improve gathering function with a "good enough" function that doesn't pull from the general
+Improve gathering function with a "good enough" heuristic that doesn't pull from the general
 Prioritized exploration
+
+Bot:
+Remembers where enemy generals are when discovered
