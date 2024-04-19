@@ -4,10 +4,11 @@ node src/index.js
 TODO:
 
 Helpers:
+Fix gathering function error on line 280~
+fix spamming e moves the viewports and gives console error
 Chaining expansion with an emphasis on a lancing strategy that bypasses any normal movement delay
 Reinforce edges of territory
 Reinforce king
-Improve gathering function with a "good enough" heuristic that doesn't pull from the general
 Prioritized exploration
 
 Bot:

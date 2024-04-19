@@ -114,7 +114,14 @@ function getGroupActions(cells) {
   return groupActions;
 }
 
-function _getGroupAction(cell, cells) {
+  /**
+   * Retrieves the group actions for a given cell in a grid.
+   *
+   * @param {Object} cell - The cell object containing the coordinates and value.
+   * @param {Array<Array<Object>>} cells - The grid of cells.
+   * @returns {Array<Object>} - The array of group actions.
+   */
+  function _getGroupAction(cell, cells) {
   let x = cell.x;
   let y = cell.y;
   let xl = x - 1;
@@ -278,6 +285,7 @@ function inRange(x, y) {
 }
 
 function isValuableTile(cell) {
+  if (!cell) return false;
   return cell.kind.indexOf(color) >= 0 && cell.kind.some(r => valuableTiles.indexOf(r) >= 0);
 }
 
