@@ -12,6 +12,7 @@ function printHelp(info) {
 }
 
 async function cli() {
+  console.log('argument:', process.argv[2])
   const helper = await puppet.helper();
   let smartBots = [];
 
@@ -33,7 +34,7 @@ async function cli() {
         ]);
       },
       's': async (args) => {
-        let gameID = '';
+        let gameID = 'ripteam';
         if (args && args[0]) {
           gameID = args[0];
         }
