@@ -20,7 +20,7 @@ const smartBot = async (browser) => {
       const context = await this.browser.createIncognitoBrowserContext();
       this.page = await context.newPage();
       
-      await this.page.setViewport({ width: 1440, height: 780});
+      await this.page.setViewport({ width: 1728, height: 1117});
       await this.page.goto(`http://generals.io/games/${gameID}`);
 
       try {
@@ -109,28 +109,28 @@ const smartBot = async (browser) => {
       await this.page.evaluate(async () => {
         
         async function tick() {
-          let turn = getTurn();
-          if (turn < turnToMove) {
-            return;
-          }
+          // let turn = getTurn();
+          // if (turn < turnToMove) {
+          //   return;
+          // }
 
-          // adjust turn tick
-          turnToMove = turn;
+          // // adjust turn tick
+          // turnToMove = turn;
           let cells = getCells();
 
-          if (king.isDiscovered) {
-            await burstMove(king.x, king.y, cells, false);
-            king.isDiscovered = false;
-            return;
-          }
+          // if (king.isDiscovered) {
+          //   await burstMove(king.x, king.y, cells, false);
+          //   king.isDiscovered = false;
+          //   return;
+          // }
 
-          checkKingBorder(cells);
+          // checkKingBorder(cells);
 
-          let otherKing = getOtherKing(cells);
-          if (otherKing !== null) {
-            await burstMove(otherKing.x, otherKing.y, cells, false);
-            return;
-          }
+          // let otherKing = getOtherKing(cells);
+          // if (otherKing !== null) {
+          //   await burstMove(otherKing.x, otherKing.y, cells, false);
+          //   return;
+          // }
 
           let aggressiveActions = getAggressiveActions(getCells());
           if (aggressiveActions.length > 0) {
