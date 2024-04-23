@@ -152,7 +152,6 @@ const helper = async () => {
                 }
               }
             }
-            alert('init done');
           }
         
           if (handled) {
