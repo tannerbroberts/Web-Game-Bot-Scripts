@@ -34,8 +34,7 @@ async function cli() {
       },
       's': async (args) => {
         let gameID;
-        if (process.argv[2]) gameID = process.argv[2];
-        else if(args) gameID = args;
+        if (args) gameID = args;
         else gameID = 'ripteam';
         if (args && args[0]) {
           gameID = args[0];
@@ -96,6 +95,11 @@ async function cli() {
   };  
 
   while (true) {
+    if (process.argv[2]) {
+      gameID = process.argv[2];
+      term.green('running generals bot with gameID: '+gameID+'\n');
+      await helper.start(gameID);
+    }
     term.yellow( "generals bot> " ) ;
     let cmd = await new Promise((resolve, reject) => {
       term.inputField((err, input) => {

@@ -1,7 +1,7 @@
 const timeout = ms => new Promise(res => setTimeout(res, ms));
 
 let foundKing = false;
-let isInit = false;
+let isInit = true;
 let turnToMove = 0;
 let color = '';
 let h = 0;
