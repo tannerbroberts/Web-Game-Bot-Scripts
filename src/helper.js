@@ -10,6 +10,7 @@ const helper = async () => {
     browser: null,
     page: null,
     async start(gameID) {
+      if (!gameID) throw new Error('gameID is required');
       this.isRunning = true;
       this.browser = await puppeteer.launch({
         headless: false,
@@ -17,12 +18,8 @@ const helper = async () => {
       });
       this.page = await this.browser.newPage();
       await this.page.setViewport({ width: 1440, height: 780});
+      await this.page.goto(`http://generals.io/games/${gameID}`);
 
-      if (gameID) {
-        await this.page.goto(`http://generals.io/games/${gameID}`);
-      } else {
-        await this.page.goto(`http://generals.io/`);
-      }
       
 
       if (fs.existsSync(localStoragePath) && fs.lstatSync(localStoragePath).isFile()) {
@@ -139,6 +136,7 @@ const helper = async () => {
             }
           } else if (e.keyCode === 73) {  // i -> init
             isInit = true;
+            console.log('initialized')
             let cells = getCells()
             color = getColor(cells);
             h = cells.length;
@@ -163,7 +161,7 @@ const helper = async () => {
     },
     async stop() {
       this.isRunning = false;
-      console.log('exit');
+      console.log('generals helper has exited properly');
       let storage = await this.page.evaluate(() => {
         let value, storage = {};
         for (let key in localStorage) {

@@ -1,4 +1,5 @@
 To run the project, just run the following command:
+(alias: gen)
 node src/index.js
 
 TODO:
