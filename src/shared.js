@@ -1,7 +1,6 @@
 const timeout = ms => new Promise(res => setTimeout(res, ms));
 
 let foundKing = false;
-let isInit = false;
 let turnToMove = 0;
 let color = '';
 let h = 0;
@@ -19,7 +18,6 @@ let DirectionToKey = {
   '0,1': 's',
 };
 
-const burstCount = 1;
 const objNotToPass = ['mountain', 'obstacle'];
 const valuableTiles = ['general', 'city'];
 const topLimit = 1;
@@ -98,107 +96,47 @@ function _getAction(cell, cells, func) {
   return borderItems.filter(func);
 }
 
-function getGroupActions(cells) {
-  let groupActions = [];
+function getExpandActions(cells) {
+  let expandActions = [];
   for (const row of cells) {
     for (const cell of row) {
       if (cell.kind.indexOf(color) >= 0) {
-        let actions = _getGroupAction(cell, cells);
-        groupActions = [
+        let actions = _getExpandAction(cell, cells);
+        expandActions = [
           ...actions,
-          ...groupActions
+          ...expandActions
         ];
       }
     }
   }
-  return groupActions;
+  return expandActions;
 }
 
-  /**
-   * Retrieves the group actions for a given cell in a grid.
-   *
-   * @param {Object} cell - The cell object containing the coordinates and value.
-   * @param {Array<Array<Object>>} cells - The grid of cells.
-   * @returns {Array<Object>} - The array of group actions.
-   */
-  function _getGroupAction(cell, cells) {
-  let x = cell.x;
-  let y = cell.y;
-  let xl = x - 1;
-  let xr = x + 1;
-  let yu = y - 1;
-  let yd = y + 1;
-  const needItems = [color];
-  // let maxActions = cell.value === NaN ? 0 : cell.value - 1;
-  let maxActions = (isNaN(cell.value) || cell.value < groupLimit) ? 0 : 1;
+function _getExpandAction(cell, cells) {
+  const avoidItems = [color, 'mountain', 'going to fill', ''];
 
-  let actions = [];
+  if (isNaN(cell.value) || cell.value === 1) return [];
 
-  if (maxActions > 0 && inRange(xl, y) && cells[y][xl].kind.some(r => needItems.indexOf(r) >= 0) && !isNaN(cells[y][xl].value) && cells[y][xl].value > cell.value) {
-    maxActions--;
-    actions.push({
-      from: {
-        x,
-        y,
-      },
-      to: {
-        x: xl,
-        y
-      }
-    });
-    cells[y][x].value = 1;
-    cells[y][xl].value += cell.value-1;
-  }
+  let actions = _getAction(cell, cells, ({ from, to }) => {
+    let valid = to.kind[0] === '';
+    if (valid) {
+      to.kind[0] = 'going to fill';
+    }
+    return valid;
+  });
 
-  if (maxActions > 0 && inRange(xr, y) && cells[y][xr].kind.some(r => needItems.indexOf(r) >= 0) && !isNaN(cells[y][xr].value) && cells[y][xr].value > cell.value) {
-    maxActions--;
-    actions.push({
-      from: {
-        x,
-        y,
-      },
-      to: {
-        x: xr,
-        y
-      }
-    });
-    cells[y][x].value = 1;
-    cells[y][xr].value += cell.value-1;
-  }
+  if (actions.length < 1) return [];
 
-  if (maxActions > 0 && inRange(x, yu) && cells[yu][x].kind.some(r => needItems.indexOf(r) >= 0) && !isNaN(cells[yu][x].value) && cells[yu][x].value > cell.value) {
-    maxActions--;
-    actions.push({
-      from: {
-        x,
-        y,
-      },
-      to: {
-        x,
-        y: yu
-      }
-    });
-    cells[y][x].value = 1;
-    cells[yu][x].value += cell.value-1;
-  }
+  return actions.slice(0, 1);
+}
 
-  if (maxActions > 0 && inRange(x, yd) && cells[yd][x].kind.some(r => needItems.indexOf(r) >= 0) && !isNaN(cells[yd][x].value) && cells[yd][x].value > cell.value) {
-    maxActions--;
-    actions.push({
-      from: {
-        x,
-        y,
-      },
-      to: {
-        x,
-        y: yd
-      }
-    });
-    cells[y][x].value = 1;
-    cells[yd][x].value += cell.value-1;
-  }
+function inRange(x, y) {
+  return x >= 0 && x < w && y >= 0 && y < h;
+}
 
-  return actions;
+function isValuableTile(cell) {
+  if (!cell) return false;
+  return cell.kind.indexOf(color) >= 0 && cell.kind.some(r => valuableTiles.indexOf(r) >= 0);
 }
 
 function getAggressiveActions(cells) {
@@ -244,49 +182,6 @@ function _getAggressiveAction(cell, cells) {
 
   if (townActions.length > 0) return [townActions[0]];
   return actions.slice(0, 1);
-}
-
-function getExpandActions(cells) {
-  let expandActions = [];
-  for (const row of cells) {
-    for (const cell of row) {
-      if (cell.kind.indexOf(color) >= 0) {
-        let actions = _getExpandAction(cell, cells);
-        expandActions = [
-          ...actions,
-          ...expandActions
-        ];
-      }
-    }
-  }
-  return expandActions;
-}
-
-function _getExpandAction(cell, cells) {
-  const avoidItems = [color, 'mountain', 'going to fill', ''];
-
-  if (isNaN(cell.value) || cell.value === 1) return [];
-
-  let actions = _getAction(cell, cells, ({ from, to }) => {
-    let valid = to.kind[0] === '';
-    if (valid) {
-      to.kind[0] = 'going to fill';
-    }
-    return valid;
-  });
-
-  if (actions.length < 1) return [];
-
-  return actions.slice(0, 1);
-}
-
-function inRange(x, y) {
-  return x >= 0 && x < w && y >= 0 && y < h;
-}
-
-function isValuableTile(cell) {
-  if (!cell) return false;
-  return cell.kind.indexOf(color) >= 0 && cell.kind.some(r => valuableTiles.indexOf(r) >= 0);
 }
 
 async function makeMove(from, to, force) {

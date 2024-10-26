@@ -65,10 +65,6 @@ const helper = async () => {
           let handled = false;
         
           if (e.keyCode === 67) {   // c -> fill space
-            if (!isInit) {
-              alert('init first');
-              return;
-            }
         
             handled = true;
             console.log('f pressed');
@@ -77,22 +73,13 @@ const helper = async () => {
               await makeMove(move.from, move.to);
             }
           } else if (e.keyCode === 71) {  // g -> group
-            if (!isInit) {
-              alert('init first');
-              return;
-            }
         
             handled = true;
-            console.log('g pressed');
             let groupActions = getGroupActions(getCells());
             for (const move of groupActions) {
               await makeMove(move.from, move.to);
             }
           } else if (e.keyCode === 69) {  // e -> aggressive fill
-            if (!isInit) {
-              alert('init first');
-              return;
-            }
         
             handled = true;
             console.log('e pressed');
@@ -101,13 +88,8 @@ const helper = async () => {
               await makeMove(move.from, move.to);
             }
           } else if (e.keyCode == 72) { // h -> go home, save the queen!
-            if (!isInit) {
-              alert('init first');
-              return;
-            }
         
             handled = true;
-            console.log('h pressed');
             let cells = getCells();
             let grid = getGrid(cells);
     
@@ -134,25 +116,13 @@ const helper = async () => {
                 }, );
               }
             }
-          } else if (e.keyCode === 73) {  // i -> init
-            isInit = true;
-            console.log('initialized')
-            let cells = getCells()
-            color = getColor(cells);
-            h = cells.length;
-            w = cells[0].length;
-            
-            for (const row of cells) {
-              for (const each of row) {
-                if (each.kind.indexOf(color) >= 0 && each.kind.indexOf('general') >= 0) {
-                  king.x = each.x;
-                  king.y = each.y;
-                }
-              }
-            }
-            alert('init done');
           }
-        
+          // p -> print cells
+          else if (e.keyCode == 80) {
+            handled = true;
+            console.log(getCells());
+          }
+
           if (handled) {
             e.preventDefault();
           }
