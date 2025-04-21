@@ -1,28 +1,29 @@
 const term = require( 'terminal-kit' ).terminal;
-const puppet = require('./puppet');
+const helper = require('./helper');
 
 function printHelp(info) {
+  console.log('');
   for (const each of info) {
     term.green(each[0]+': ');
     
-    term.right(30-each[0].length);
+    term.right(2-each[0].length);
     term.cyan(each[1]);
     console.log('');
   }
+  console.log('');
 }
 
 async function cli() {
   console.log('argument:', process.argv[2])
-  const helper = await puppet.helper();
-  let smartBots = [];
+  const helperInstance = await helper();
 
   const cmds = {
     'c': async () => {
       term.clear();
     },
     'q': async () => {
-      if (helper.isRunning) {
-        await helper.stop();
+      if (helperInstance.isRunning) {
+        await helperInstance.stop();
       }
       process.exit();
     },
@@ -30,66 +31,28 @@ async function cli() {
       printHelp([
         ['c', 'clear screen'],
         ['q', 'quit application'],
-        ['s', 'start game with helper (optional: gameID)'],
+        ['s', 'start game with helper at generals.io/games/ripteam'],
         ['x', 'stop/halt game with helper'],
-        ['l', 'launch smart bots (args: gameID, optional: number)'],
-        ['b', 'start all created smart bots'],
-        ['k', 'kill all smart bots'],
         ['?', 'show help']
       ]);
     },
-    's': async (args) => {
+    's': async () => {
       let gameID = 'ripteam';
-      if (args && args[0]) {
-        gameID = args[0];
+      if (helperInstance.isRunning) {
+        await helperInstance.stop();
       }
 
-      if (helper.isRunning) {
-        await helper.stop();
-      }
-
-      await helper.start(gameID);
+      await helperInstance.start(gameID);
     },
     'x': async () => {
-      if (helper.isRunning) {
-        await helper.stop();
+      if (helperInstance.isRunning) {
+        await helperInstance.stop();
       }
     },
-    'l': async (args) => {
-      if (!args || !args[0]) {
-        term.red('need gameID!\n');
-        return;
-      }
-
-      let num = 1;
-      if (args[1] && !isNaN(parseInt(args[1]))) {
-        num = parseInt(args[1]);
-      }
-
-      let gameID = args[0];
-      for (let i = 0; i < num; i++) {
-        let smartBot = await puppet.smartBot();
-        smartBots.push(smartBot);
-        smartBot.launch(gameID);
-      }
-    },
-    'b': async (args) => {
-      for (const each of smartBots) {
-        each.start();
-      }
-    },
-    'k': async () => {
-      for (const each of smartBots) {
-        if (each.isRunning) {
-          await each.stop();
-        }          
-      }
-      smartBots = [];
-    }
   };  
 
   while (true) {
-    term.yellow( "generals bot> " ) ;
+    term.yellow( "generals helper> " ) ;
     let input = await new Promise((resolve, reject) => {
       term.inputField((err, input) => {
         if (err) {

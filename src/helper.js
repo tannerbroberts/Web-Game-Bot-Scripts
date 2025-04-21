@@ -24,7 +24,6 @@ const helper = async () => {
         await this.page.goto(`http://generals.io/`);
       }
       
-
       if (fs.existsSync(localStoragePath) && fs.lstatSync(localStoragePath).isFile()) {
         let storage = fs.readFileSync(localStoragePath, 'utf8');
         try {
@@ -68,11 +67,6 @@ const helper = async () => {
           let handled = false;
         
           if (e.keyCode === 70) {   // F -> fill space (was C)
-            if (!isInit) {
-              alert('init first');
-              return;
-            }
-        
             handled = true;
             console.log('F pressed - fill space');
             let expandActions = getExpandActions(getCells());
@@ -80,11 +74,6 @@ const helper = async () => {
               await makeMove(move.from, move.to);
             }
           } else if (e.keyCode === 71) {  // G -> group (unchanged)
-            if (!isInit) {
-              alert('init first');
-              return;
-            }
-        
             handled = true;
             console.log('G pressed - group');
             let groupActions = getGroupActions(getCells());
@@ -92,11 +81,6 @@ const helper = async () => {
               await makeMove(move.from, move.to);
             }
           } else if (e.keyCode === 65) {  // A -> aggressive fill (was E)
-            if (!isInit) {
-              alert('init first');
-              return;
-            }
-        
             handled = true;
             console.log('A pressed - aggressive fill');
             let aggressiveActions = getAggressiveActions(getCells());
@@ -104,11 +88,6 @@ const helper = async () => {
               await makeMove(move.from, move.to);
             }
           } else if (e.keyCode == 72) { // H -> go home, save the queen! (unchanged)
-            if (!isInit) {
-              alert('init first');
-              return;
-            }
-        
             handled = true;
             console.log('H pressed - go home');
             let cells = getCells();
@@ -137,9 +116,8 @@ const helper = async () => {
                 }, );
               }
             }
-          } else if (e.keyCode === 73) {  // I -> init (unchanged)
-            isInit = true;
-            let cells = getCells()
+          } else if (e.keyCode === 73) {  // I -> initialize game data
+            let cells = getCells();
             color = getColor(cells);
             h = cells.length;
             w = cells[0].length;
@@ -152,7 +130,7 @@ const helper = async () => {
                 }
               }
             }
-            alert('init done');
+            alert('Game initialized');
           }
         
           if (handled) {
