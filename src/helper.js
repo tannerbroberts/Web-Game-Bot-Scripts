@@ -67,50 +67,50 @@ const helper = async () => {
         
           let handled = false;
         
-          if (e.keyCode === 67) {   // c -> fill space
+          if (e.keyCode === 70) {   // F -> fill space (was C)
             if (!isInit) {
               alert('init first');
               return;
             }
         
             handled = true;
-            console.log('f pressed');
+            console.log('F pressed - fill space');
             let expandActions = getExpandActions(getCells());
             for (const move of expandActions) {
               await makeMove(move.from, move.to);
             }
-          } else if (e.keyCode === 71) {  // g -> group
+          } else if (e.keyCode === 71) {  // G -> group (unchanged)
             if (!isInit) {
               alert('init first');
               return;
             }
         
             handled = true;
-            console.log('g pressed');
+            console.log('G pressed - group');
             let groupActions = getGroupActions(getCells());
             for (const move of groupActions) {
               await makeMove(move.from, move.to);
             }
-          } else if (e.keyCode === 69) {  // e -> aggressive fill
+          } else if (e.keyCode === 65) {  // A -> aggressive fill (was E)
             if (!isInit) {
               alert('init first');
               return;
             }
         
             handled = true;
-            console.log('e pressed');
+            console.log('A pressed - aggressive fill');
             let aggressiveActions = getAggressiveActions(getCells());
             for (const move of aggressiveActions) {
               await makeMove(move.from, move.to);
             }
-          } else if (e.keyCode == 72) { // h -> go home, save the queen!
+          } else if (e.keyCode == 72) { // H -> go home, save the queen! (unchanged)
             if (!isInit) {
               alert('init first');
               return;
             }
         
             handled = true;
-            console.log('h pressed');
+            console.log('H pressed - go home');
             let cells = getCells();
             let grid = getGrid(cells);
     
@@ -137,7 +137,7 @@ const helper = async () => {
                 }, );
               }
             }
-          } else if (e.keyCode === 73) {  // i -> init
+          } else if (e.keyCode === 73) {  // I -> init (unchanged)
             isInit = true;
             let cells = getCells()
             color = getColor(cells);

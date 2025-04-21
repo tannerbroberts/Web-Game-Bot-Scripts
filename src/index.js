@@ -26,76 +26,71 @@ async function cli() {
       }
       process.exit();
     },
-    'h': {
-      '?': async (args) => {
-        printHelp([
-          ['hs ?gameID', 'start game with helper'],
-          ['hh',         'stop/halt game with helper'],
-        ]);
-      },
-      's': async (args) => {
-        let gameID = 'ripteam';
-        if (args && args[0]) {
-          gameID = args[0];
-        }
-  
-        if (helper.isRunning) {
-          await helper.stop();
-        }
-  
-        await helper.start(gameID);
-      },
-      'h': async () => {
-        if (helper.isRunning) {
-          await helper.stop();
-        }
+    '?': async () => {
+      printHelp([
+        ['c', 'clear screen'],
+        ['q', 'quit application'],
+        ['s', 'start game with helper (optional: gameID)'],
+        ['x', 'stop/halt game with helper'],
+        ['l', 'launch smart bots (args: gameID, optional: number)'],
+        ['b', 'start all created smart bots'],
+        ['k', 'kill all smart bots'],
+        ['?', 'show help']
+      ]);
+    },
+    's': async (args) => {
+      let gameID = 'ripteam';
+      if (args && args[0]) {
+        gameID = args[0];
+      }
+
+      if (helper.isRunning) {
+        await helper.stop();
+      }
+
+      await helper.start(gameID);
+    },
+    'x': async () => {
+      if (helper.isRunning) {
+        await helper.stop();
       }
     },
-    'b': {
-      '?': async (args) => {
-        printHelp([
-          ['bl gameID ?num', 'launch n smart bots'],
-          ['bS', 'start all created smart bots'],
-          ['bh',         'stop/halt all smart bots'],
-        ]);
-      },
-      's': async (args) => {
-        for (const each of smartBots) {
-          each.start();
-        }
-      },
-      'l': async (args) => {
-        if (!args || !args[0]) {
-          term.red('need gameID!\n');
-          return;
-        }
-
-        let num = 1;
-        if (args[1] && !isNaN(parseInt(args[1]))) {
-          num = parseInt(args[1]);
-        }
-
-        let gameID = args[0];
-        for (let i = 0; i < num; i++) {
-          let smartBot = await puppet.smartBot();
-          smartBots.push(smartBot);
-          smartBot.launch(gameID);
-        }
-      },
-      'h': async () => {
-        for (const each of smartBots) {
-          if (each.isRunning) {
-            await each.stop();
-          }          
-        }
-        smartBots = [];
+    'l': async (args) => {
+      if (!args || !args[0]) {
+        term.red('need gameID!\n');
+        return;
       }
+
+      let num = 1;
+      if (args[1] && !isNaN(parseInt(args[1]))) {
+        num = parseInt(args[1]);
+      }
+
+      let gameID = args[0];
+      for (let i = 0; i < num; i++) {
+        let smartBot = await puppet.smartBot();
+        smartBots.push(smartBot);
+        smartBot.launch(gameID);
+      }
+    },
+    'b': async (args) => {
+      for (const each of smartBots) {
+        each.start();
+      }
+    },
+    'k': async () => {
+      for (const each of smartBots) {
+        if (each.isRunning) {
+          await each.stop();
+        }          
+      }
+      smartBots = [];
     }
   };  
 
   while (true) {
     term.yellow( "generals bot> " ) ;
-    let cmd = await new Promise((resolve, reject) => {
+    let input = await new Promise((resolve, reject) => {
       term.inputField((err, input) => {
         if (err) {
           reject(err);
@@ -109,32 +104,26 @@ async function cli() {
     });
     console.log('');
 
-    cmd = cmd.split(' ');
-    cmd[0] = cmd[0].split('');
-
-    let func = cmds;
-
-    if (cmd[0].length < 1) {
+    if (!input) {
       continue;
     }
 
-    for (const each of cmd[0]) {
-      if (!func[each]) {
-        term.red('unknown command! try again!\n');
-        func = null;
-        break;
-      }
-      func = func[each];
+    const command = input.charAt(0);
+    const args = input.length > 1 ? [input.substring(1).trim()] : [];
+    
+    if (args[0]) {
+      // Further split the first argument if it contains spaces
+      const splitArgs = args[0].split(/\s+/);
+      args.splice(0, 1, ...splitArgs);
     }
 
-    if (func) {
-      if (typeof func === 'function') {
-        func(cmd.slice(1, cmd.length));
-      } else {
-        func['?'](cmd.slice(1, cmd.length));
-      }
-    }
+    const func = cmds[command];
 
+    if (func && typeof func === 'function') {
+      func(args);
+    } else {
+      term.red('unknown command! try ? for help\n');
+    }
   }
 }
 
