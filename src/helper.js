@@ -164,7 +164,7 @@ const helper = async () => {
     async stop() {
       this.isRunning = false;
       console.log('exit');
-      let storage = await this.page.evaluate(() => {
+      let newStorage = await this.page.evaluate(() => {
         let value, storage = {};
         for (let key in localStorage) {
           if (value = localStorage.getItem(key))
@@ -173,7 +173,21 @@ const helper = async () => {
   
         return storage;
       });
-      fs.writeFileSync(localStoragePath, JSON.stringify(storage));
+      
+      // Only update keys rather than replacing the entire file
+      let existingStorage = {};
+      if (fs.existsSync(localStoragePath) && fs.lstatSync(localStoragePath).isFile()) {
+        try {
+          const fileContent = fs.readFileSync(localStoragePath, 'utf8');
+          existingStorage = JSON.parse(fileContent);
+        } catch (e) {
+          console.error(`Error reading existing localStorage: ${e.message}`);
+        }
+      }
+      
+      // Merge the new storage with existing storage
+      const updatedStorage = { ...existingStorage, ...newStorage };
+      fs.writeFileSync(localStoragePath, JSON.stringify(updatedStorage, null, 2));
         
       await this.browser.close();
     }
