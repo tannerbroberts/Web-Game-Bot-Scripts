@@ -1,8 +1,8 @@
 # To get up and running:
-1. Copy bookmarklet.js from this repository
-2. Go [here](https://codepen.io/zvakanaka/full/LYgRwEp)
-3. Paste bookmarklet.js into the source code section
-4. Change the following line to your username
+1. Copy the contents of bookmarklet.js from this repository
+2. Open [this link](https://codepen.io/zvakanaka/full/LYgRwEp) in a new tab
+3. Paste the bookmarklet.js code into the source code section
+4. Change the following line near the top to your username
    ```javascript
    const PLAYER_NAME = "YOUR_NAME"; // Change this to your actual player name in generals.io
    ```

@@ -1,211 +1,576 @@
-(function() {
-    /*
-     * generals.io Auto-Expand Bookmarklet
-     * Press 't' to automatically expand from a territory with >1 army into an adjacent empty tile.
-     */
-    
-    // CONFIGURE YOUR PLAYER NAME HERE
-    const PLAYER_NAME = "<YOUR_NAME>"; // Change this to your actual player name in generals.io
-    
-    alert('Generals.io auto-expand script activated!\n\nPress "t" to automatically capture an adjacent empty tile.');
+(function () {
+  /*
+   * generals.io Advanced Strategy Bookmarklet
+   * Press 'q' for auto-expand, 'g' for gather army, 'e' for lance exploration
+   */
 
-    let isListenerActive = true;
-    let lastEventTime = 0;
+  // CONFIGURE YOUR PLAYER NAME HERE
+  const PLAYER_NAME = "Mr. Gitcha@2.0"; // Change this to your actual player name in generals.io
 
-    // Function to simulate a mouse click at the center of an element
-    function simulateMouseClick(element) {
-        console.log("Auto-expand: Simulating click on element:", element);
-        const rect = element.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-        
-        // Create and dispatch mousedown event
-        const mouseDownEvent = new MouseEvent('mousedown', {
-            bubbles: true,
-            cancelable: true,
-            clientX: centerX,
-            clientY: centerY,
-            button: 0 // Left mouse button
-        });
-        element.dispatchEvent(mouseDownEvent);
-        
-        // Create and dispatch mouseup event
-        const mouseUpEvent = new MouseEvent('mouseup', {
-            bubbles: true,
-            cancelable: true,
-            clientX: centerX,
-            clientY: centerY,
-            button: 0 // Left mouse button
-        });
-        element.dispatchEvent(mouseUpEvent);
-        
-        // Create and dispatch click event
-        const clickEvent = new MouseEvent('click', {
-            bubbles: true,
-            cancelable: true,
-            clientX: centerX,
-            clientY: centerY,
-            button: 0 // Left mouse button
-        });
-        element.dispatchEvent(clickEvent);
+  // Function to simulate a mouse click at the center of an element
+  function simulateMouseClick(element) {
+    const rect = element.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    // Create and dispatch mousedown event
+    const mouseDownEvent = new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      clientX: centerX,
+      clientY: centerY,
+      button: 0 // Left mouse button
+    });
+    element.dispatchEvent(mouseDownEvent);
+
+    // Create and dispatch mouseup event
+    const mouseUpEvent = new MouseEvent('mouseup', {
+      bubbles: true,
+      cancelable: true,
+      clientX: centerX,
+      clientY: centerY,
+      button: 0 // Left mouse button
+    });
+    element.dispatchEvent(mouseUpEvent);
+
+    // Create and dispatch click event
+    const clickEvent = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      clientX: centerX,
+      clientY: centerY,
+      button: 0 // Left mouse button
+    });
+    element.dispatchEvent(clickEvent);
+  }
+
+  // Visual indicator management system
+  const activeIndicators = new Map(); // Maps listener names to their visual elements
+
+  // Create a colored orb indicator
+  function createIndicatorOrb(color, name) {
+    const orb = document.createElement('div');
+    orb.id = `generals-helper-orb-${name}`;
+    orb.style.cssText = `
+      position: fixed;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background-color: ${color};
+      border: 3px solid #000000;
+      z-index: 999999;
+      pointer-events: auto;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    `;
+
+    // Position orbs in the lower left corner, stacked vertically
+    const orbCount = activeIndicators.size;
+    orb.style.bottom = `${10 + (orbCount * 30)}px`;
+    orb.style.left = '10px';
+
+    // Add click handler to remove the listener
+    orb.addEventListener('click', () => unregisterListenerWithIndicator(name));
+
+    document.body.appendChild(orb);
+    return orb;
+  }
+
+  // Remove an indicator orb
+  function removeIndicatorOrb(name) {
+    const orb = document.getElementById(`generals-helper-orb-${name}`);
+    if (orb) {
+      orb.remove();
+    }
+  }
+
+  // Register an event listener with visual indicator
+  function registerListenerWithIndicator(name, color, eventType, handler, options = {}) {
+    // Remove existing listener and indicator if present
+    unregisterListenerWithIndicator(name);
+
+    // Create visual indicator
+    const orb = createIndicatorOrb(color, name);
+
+    // Register event listener
+    const target = options.target || document;
+    target.addEventListener(eventType, handler, options.capture || false);
+
+    // Store reference
+    activeIndicators.set(name, {
+      orb: orb,
+      target: target,
+      eventType: eventType,
+      handler: handler,
+      options: options
+    });
+  }
+
+  // Unregister an event listener and remove its visual indicator
+  function unregisterListenerWithIndicator(name) {
+    if (activeIndicators.has(name)) {
+      const listenerData = activeIndicators.get(name);
+
+      // Remove event listener
+      listenerData.target.removeEventListener(
+        listenerData.eventType,
+        listenerData.handler,
+        listenerData.options.capture || false
+      );
+
+      // Remove visual indicator
+      removeIndicatorOrb(name);
+
+      // Remove from tracking
+      activeIndicators.delete(name);
+
+      // Reposition remaining orbs
+      repositionOrbs();
+    }
+  }
+
+  // Reposition orbs after one is removed
+  function repositionOrbs() {
+    let index = 0;
+    for (const data of activeIndicators.values()) {
+      data.orb.style.bottom = `${10 + (index * 30)}px`;
+      index++;
+    }
+  }
+
+  // Main auto-expand function
+  function performAutoExpand() {
+    const myColor = findPlayerColor();
+    if (!myColor) return;
+
+    const myTerritories = document.querySelectorAll(`#gameMap td.${myColor}`);
+    const map = document.getElementById('gameMap');
+    const numRows = map.rows.length;
+
+    const expandedInto = new Set();
+    let expansionsPerformed = 0;
+
+    for (const territory of myTerritories) {
+      if (parseInt(territory.innerText) <= 1) continue;
+
+      const r = territory.parentElement.rowIndex;
+      const c = territory.cellIndex;
+
+      const neighbors = [
+        { row: r, col: c - 1 }, // left
+        { row: r, col: c + 1 }, // right
+        { row: r - 1, col: c }, // up
+        { row: r + 1, col: c }  // down
+      ];
+
+      for (const pos of neighbors) {
+        if (pos.row >= 0 && pos.row < numRows && pos.col >= 0 && pos.col < map.rows[pos.row].cells.length) {
+          const neighborCell = map.rows[pos.row].cells[pos.col];
+
+          if (neighborCell?.className === '') {
+            const cellId = `${pos.row}-${pos.col}`;
+
+            if (!expandedInto.has(cellId)) {
+              simulateMouseClick(territory);
+              simulateMouseClick(neighborCell);
+              expandedInto.add(cellId);
+              expansionsPerformed++;
+              break;
+            }
+          }
+        }
+      }
     }
 
-    // Main auto-expand function
-    function performAutoExpand() {
-        console.log("Auto-expand: T key pressed, attempting expansion...");
-        
-        // 1. Find the player's color by looking for their name in the leaderboard or game UI
-        let myColor = null;
-        
-        // Try to find player name in the leaderboard to determine color
-        const leaderboardEntries = document.querySelectorAll('#leaderboard .player-entry, .leaderboard-entry, .player-row');
-        for (const entry of leaderboardEntries) {
-            if (entry.textContent.includes(PLAYER_NAME)) {
-                // Extract color class from the entry
-                const colorClasses = Array.from(entry.classList).filter(cls => 
-                    ['red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'gray'].includes(cls)
-                );
-                if (colorClasses.length > 0) {
-                    myColor = colorClasses[0];
-                    break;
-                }
-            }
+    console.log(expansionsPerformed > 0
+      ? `Auto-expand: Performed ${expansionsPerformed} expansion(s)`
+      : "Auto-expand: No valid moves found.");
+  }
+
+  // Helper function to find player color
+  function findPlayerColor() {
+    const leaderboardEntries = document.querySelectorAll('#leaderboard .player-entry, .leaderboard-name, .player-row');
+
+    for (const entry of leaderboardEntries) {
+      const parentTd = entry.closest('.leaderboard-name');
+      if (parentTd) {
+        const entryColors = Array.from(parentTd.classList).filter(cls =>
+          ['red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'gray'].includes(cls)
+        );
+
+        const nameSpan = entry.querySelector('span');
+        if (nameSpan?.textContent.includes(PLAYER_NAME)) {
+          const myColor = entryColors.find(Boolean);
+          if (myColor) {
+            console.log(`Using color "${myColor}" for player "${PLAYER_NAME}"`);
+            return myColor;
+          }
         }
-        
-        // Fallback: try to find by looking for a general (original method)
-        if (!myColor) {
-            const myGeneral = document.querySelector('td.general');
-            if (myGeneral) {
-                myColor = myGeneral.classList[0];
-                console.log("Auto-expand: Using fallback method to find color from general");
-            }
-        }
-        
-        if (!myColor) {
-            console.log(`Auto-expand: Cannot find color for player "${PLAYER_NAME}". Make sure the player name is correct and you're in a game.`);
-            return;
-        }
-
-        console.log(`Auto-expand: Using color "${myColor}" for player "${PLAYER_NAME}"`);
-
-        // 2. Get all of my territories and the game map element.
-        const myTerritories = document.querySelectorAll(`#gameMap td.${myColor}`);
-        const map = document.getElementById('gameMap');
-        const numRows = map.rows.length;
-
-        console.log(`Auto-expand: Found ${myTerritories.length} territories with color ${myColor}`);
-
-        // Track which empty territories we've already expanded into
-        const expandedInto = new Set();
-        let expansionsPerformed = 0;
-
-        // 3. Loop through every territory I own.
-        for (const territory of myTerritories) {
-            // Only move from a territory that has more than 1 army.
-            if (parseInt(territory.innerText) <= 1) {
-                continue;
-            }
-
-            const r = territory.parentElement.rowIndex;
-            const c = territory.cellIndex;
-
-            // Define the coordinates of the four adjacent cells (up, down, left, right).
-            const neighbors = [
-                { row: r, col: c - 1 }, // left
-                { row: r, col: c + 1 }, // right
-                { row: r - 1, col: c }, // up
-                { row: r + 1, col: c }  // down
-            ];
-
-            // 4. Check each neighbor for this territory.
-            for (const pos of neighbors) {
-                // Check if the neighbor's coordinates are within the map boundaries.
-                if (pos.row >= 0 && pos.row < numRows && pos.col >= 0 && pos.col < map.rows[pos.row].cells.length) {
-                    const neighborCell = map.rows[pos.row].cells[pos.col];
-                    
-                    // An empty territory has a `className` that is an empty string.
-                    if (neighborCell && neighborCell.className === '') {
-                        // Create a unique identifier for this empty cell
-                        const cellId = `${pos.row}-${pos.col}`;
-                        
-                        // Only expand into this empty territory if we haven't already
-                        if (!expandedInto.has(cellId)) {
-                            console.log(`Auto-expand: Expanding from (${r},${c}) to empty territory (${pos.row},${pos.col})`);
-                            
-                            // 5. Perform the move using simulated mouse clicks.
-                            simulateMouseClick(territory);    // First click selects our territory.
-                            simulateMouseClick(neighborCell); // Second click moves to the empty tile.
-
-                            // Mark this empty territory as expanded into
-                            expandedInto.add(cellId);
-                            expansionsPerformed++;
-                            
-                            // Break out of the neighbor loop for this territory since we found one expansion
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Log results
-        if (expansionsPerformed > 0) {
-            console.log(`Auto-expand: Performed ${expansionsPerformed} expansion(s)`);
-        } else {
-            console.log("Auto-expand: No valid moves found.");
-        }
+      }
     }
 
-    // Event handler function
-    function keydownHandler(e) {
-        // Only trigger on the 't' key and not when typing in the chat.
-        if (e.key !== 't' || document.activeElement.id === 'chatroom-input') {
-            return;
-        }
+    console.error(`Could not find player "${PLAYER_NAME}" in leaderboard. Please check the player name.`);
+    return null;
+  }
 
-        // Prevent the 't' character from being typed and stop event propagation
-        e.preventDefault();
-        e.stopPropagation();
-        
-        lastEventTime = Date.now();
-        performAutoExpand();
+  // Get cell at position with bounds checking
+  function getCell(row, col) {
+    const map = document.getElementById('gameMap');
+    if (row >= 0 && row < map.rows.length && col >= 0 && col < map.rows[row].cells.length) {
+      return map.rows[row].cells[col];
+    }
+    return null;
+  }
+
+  // Get cell coordinates
+  function getCellCoords(cell) {
+    return {
+      row: cell.parentElement.rowIndex,
+      col: cell.cellIndex
+    };
+  }
+
+  // Get neighbors of a cell
+  function getNeighbors(row, col) {
+    return [
+      { row: row, col: col - 1, direction: 'left' },
+      { row: row, col: col + 1, direction: 'right' },
+      { row: row - 1, col: col, direction: 'up' },
+      { row: row + 1, col: col, direction: 'down' }
+    ].map(pos => ({
+      ...pos,
+      cell: getCell(pos.row, pos.col)
+    })).filter(neighbor => neighbor.cell !== null);
+  }
+
+  // Check if a cell belongs to the player
+  function isPlayerCell(cell, playerColor) {
+    return cell.classList.contains(playerColor);
+  }
+
+  // Get army count from cell
+  function getArmyCount(cell) {
+    const text = cell.innerText.trim();
+    const count = parseInt(text);
+    return isNaN(count) ? 0 : count;
+  }
+
+  // Get currently selected cell
+  function getSelectedCell() {
+    return document.querySelector('#gameMap td.selected');
+  }
+
+  // Gather function - accumulates army from up to maxClicks adjacent cells
+  function performGather(maxClicks = 10) {
+    const myColor = findPlayerColor();
+    if (!myColor) return;
+
+    console.log(`Starting gather with max ${maxClicks} clicks`);
+
+    // Find the cell with the largest army as starting point
+    const myTerritories = document.querySelectorAll(`#gameMap td.${myColor}`);
+    let bestCell = null;
+    let bestArmyCount = 0;
+
+    for (const cell of myTerritories) {
+      const armyCount = getArmyCount(cell);
+      if (armyCount > bestArmyCount) {
+        bestArmyCount = armyCount;
+        bestCell = cell;
+      }
     }
 
-    // Function to register the event listener
-    function registerEventListener() {
-        // Remove any existing listeners first
-        document.removeEventListener('keydown', keydownHandler, true);
-        // Add the listener
-        document.addEventListener('keydown', keydownHandler, true);
-        isListenerActive = true;
-        console.log("Auto-expand: Event listener registered");
+    if (!bestCell || bestArmyCount <= 1) {
+      console.log("Gather: No suitable starting cell found");
+      return;
     }
 
-    // Initial registration
-    registerEventListener();
+    // Start the recursive gathering
+    simulateMouseClick(bestCell);
+    console.log(`Gather: Starting from cell with ${bestArmyCount} armies`);
 
-    // Periodically re-register the event listener to ensure it stays active
-    setInterval(function() {
-        // Check if our listener is still working by seeing if we've had recent activity
-        const timeSinceLastEvent = Date.now() - lastEventTime;
-        
-        // Re-register every 5 seconds regardless, but log if it seems like we might have lost it
-        if (timeSinceLastEvent > 30000 && lastEventTime > 0) {
-            console.log("Auto-expand: Haven't seen T key events recently, re-registering listener");
+    performGatherRecursive(bestCell, myColor, maxClicks - 1);
+  }
+
+  // Recursive gather function
+  function performGatherRecursive(currentCell, playerColor, remainingClicks) {
+    if (remainingClicks <= 0) return;
+
+    const coords = getCellCoords(currentCell);
+    const neighbors = getNeighbors(coords.row, coords.col);
+
+    // Find the neighbor with the most armies that belongs to the player
+    let bestNeighbor = null;
+    let bestArmyCount = 1; // Only consider neighbors with more than 1 army
+
+    for (const neighbor of neighbors) {
+      if (isPlayerCell(neighbor.cell, playerColor)) {
+        const armyCount = getArmyCount(neighbor.cell);
+        if (armyCount > bestArmyCount) {
+          bestArmyCount = armyCount;
+          bestNeighbor = neighbor;
         }
-        
-        registerEventListener();
-    }, 5000); // Re-register every 5 seconds
+      }
+    }
 
-    // Also add a backup listener on the window object
-    window.addEventListener('keydown', function(e) {
-        if (e.key === 't' && document.activeElement.id !== 'chatroom-input') {
-            console.log("Auto-expand: Backup listener triggered");
-            e.preventDefault();
-            e.stopPropagation();
-            performAutoExpand();
+    if (bestNeighbor) {
+      console.log(`Gather: Clicking cell with ${bestArmyCount} armies`);
+      simulateMouseClick(bestNeighbor.cell);
+
+      // Continue gathering from the new position
+      setTimeout(() => {
+        performGatherRecursive(bestNeighbor.cell, playerColor, remainingClicks - 1);
+      }, 50); // Small delay to ensure the click is processed
+    } else {
+      console.log(`Gather: No more valid neighbors, finished with ${remainingClicks} clicks remaining`);
+    }
+  }
+
+  // Lance function - explores dense fog areas
+  function performLance() {
+    const selectedCell = getSelectedCell();
+    if (!selectedCell) {
+      console.log("Lance: No cell selected, please select a cell first");
+      return;
+    }
+
+    const myColor = findPlayerColor();
+    if (!myColor) return;
+
+    console.log("Lance: Starting fog exploration");
+
+    // Build fog map
+    const fogCells = document.querySelectorAll('#gameMap td.fog');
+    const fogMap = new Map();
+
+    for (const cell of fogCells) {
+      const coords = getCellCoords(cell);
+      const key = `${coords.row}-${coords.col}`;
+      fogMap.set(key, {
+        cell: cell,
+        row: coords.row,
+        col: coords.col,
+        density: 0
+      });
+    }
+
+    // Calculate fog density scores
+    calculateFogDensity(fogMap);
+
+    // Find the path to the densest fog area
+    const targetPath = findBestFogPath(selectedCell, fogMap, myColor);
+
+    if (targetPath.length > 0) {
+      console.log(`Lance: Found path to dense fog with ${targetPath.length} moves`);
+      executePath(targetPath);
+    } else {
+      console.log("Lance: No suitable fog exploration path found");
+    }
+  }
+
+  // Calculate fog density based on distance from non-fog areas
+  function calculateFogDensity(fogMap) {
+    for (const fogCell of fogMap.values()) {
+      let density = 0;
+      const neighbors = getNeighbors(fogCell.row, fogCell.col);
+
+      // Count fog neighbors (higher density for cells surrounded by fog)
+      for (const neighbor of neighbors) {
+        const neighborKey = `${neighbor.row}-${neighbor.col}`;
+        if (fogMap.has(neighborKey)) {
+          density += 1;
         }
-    }, true);
+      }
 
-    console.log("Auto-expand: Script fully initialized with periodic re-registration");
+      // Bonus for being far from edges (simple heuristic)
+      const distanceFromEdge = Math.min(
+        fogCell.row,
+        fogCell.col,
+        document.getElementById('gameMap').rows.length - fogCell.row - 1,
+        document.getElementById('gameMap').rows[0].cells.length - fogCell.col - 1
+      );
+      density += Math.max(0, distanceFromEdge - 2);
+
+      fogCell.density = density;
+    }
+  }
+
+  // Find the best path to dense fog areas
+  function findBestFogPath(startCell, fogMap, playerColor) {
+    const startCoords = getCellCoords(startCell);
+    const visited = new Set();
+    const path = [];
+
+    // Simple greedy approach: move towards the highest density fog
+    let currentRow = startCoords.row;
+    let currentCol = startCoords.col;
+    const maxMoves = 8; // Limit path length
+
+    for (let moves = 0; moves < maxMoves; moves++) {
+      const neighbors = getNeighbors(currentRow, currentCol);
+      let bestMove = null;
+      let bestScore = -1;
+
+      for (const neighbor of neighbors) {
+        const cell = neighbor.cell;
+        const cellKey = `${neighbor.row}-${neighbor.col}`;
+
+        // Skip if already visited or not moveable
+        if (visited.has(cellKey)) continue;
+
+        let score = 0;
+
+        // Prefer empty cells or player cells for movement
+        if (cell.className === '' || isPlayerCell(cell, playerColor)) {
+          score += 10;
+
+          // Calculate potential fog revelation score
+          const revealNeighbors = getNeighbors(neighbor.row, neighbor.col);
+          for (const revealNeighbor of revealNeighbors) {
+            const revealKey = `${revealNeighbor.row}-${revealNeighbor.col}`;
+            if (fogMap.has(revealKey)) {
+              score += fogMap.get(revealKey).density;
+            }
+          }
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestMove = neighbor;
+          }
+        }
+      }
+
+      if (bestMove && bestScore > 0) {
+        path.push(bestMove.cell);
+        visited.add(`${bestMove.row}-${bestMove.col}`);
+        currentRow = bestMove.row;
+        currentCol = bestMove.col;
+      } else {
+        break;
+      }
+    }
+
+    return path;
+  }
+
+  // Execute a path of moves
+  function executePath(path) {
+    if (path.length === 0) return;
+
+    const selectedCell = getSelectedCell();
+    if (selectedCell) {
+      simulateMouseClick(selectedCell); // Ensure something is selected
+    }
+
+    path.forEach((cell, index) => {
+      setTimeout(() => {
+        simulateMouseClick(cell);
+        console.log(`Lance: Move ${index + 1}/${path.length}`);
+      }, index * 100); // Stagger the clicks
+    });
+  }
+
+  // Event handler functions
+  function autoExpandHandler(e) {
+    if (e.key !== 'q' || document.activeElement.id === 'chatroom-input') {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    performAutoExpand();
+  }
+
+  function gatherHandler(e) {
+    if (e.key !== 'g' || document.activeElement.id === 'chatroom-input') {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    performGather();
+  }
+
+  function lanceHandler(e) {
+    if (e.key !== 'e' || document.activeElement.id === 'chatroom-input') {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    performLance();
+  }
+
+  // Function to register all event listeners with visual indicators
+  function registerAllEventListeners() {
+    // Register auto-expand (Q key) with blue indicator
+    registerListenerWithIndicator(
+      'auto-expand',
+      '#0080ff', // Blue color
+      'keydown',
+      autoExpandHandler,
+      { capture: true }
+    );
+
+    // Register gather (G key) with green indicator  
+    registerListenerWithIndicator(
+      'gather',
+      '#00ff00', // Green color
+      'keydown',
+      gatherHandler,
+      { capture: true }
+    );
+
+    // Register lance (E key) with red indicator
+    registerListenerWithIndicator(
+      'lance',
+      '#ff0000', // Red color
+      'keydown',
+      lanceHandler,
+      { capture: true }
+    );
+
+    // Backup listeners on window object
+    registerListenerWithIndicator(
+      'auto-expand-backup',
+      '#4040ff', // Light blue
+      'keydown',
+      autoExpandHandler,
+      { target: window, capture: true }
+    );
+
+    registerListenerWithIndicator(
+      'gather-backup',
+      '#40ff40', // Light green
+      'keydown',
+      gatherHandler,
+      { target: window, capture: true }
+    );
+
+    registerListenerWithIndicator(
+      'lance-backup',
+      '#ff4040', // Light red
+      'keydown',
+      lanceHandler,
+      { target: window, capture: true }
+    );
+  }
+
+  // Initial registration
+  registerAllEventListeners();
+
+  // Periodically re-register the event listeners to ensure they stay active
+  setInterval(function () {
+    // Only re-register if the listener doesn't exist
+    if (!activeIndicators.has('auto-expand')) {
+      registerListenerWithIndicator('auto-expand', '#0080ff', 'keydown', autoExpandHandler, { capture: true });
+    }
+    if (!activeIndicators.has('gather')) {
+      registerListenerWithIndicator('gather', '#00ff00', 'keydown', gatherHandler, { capture: true });
+    }
+    if (!activeIndicators.has('lance')) {
+      registerListenerWithIndicator('lance', '#ff0000', 'keydown', lanceHandler, { capture: true });
+    }
+  }, 1000); // Check every second
+
+  console.log("Advanced Strategy: Script fully initialized with visual indicators");
+  console.log("Controls: Q = Auto-expand, G = Gather army, E = Lance exploration");
+  console.log("Click orbs to disable functions");
 })();
