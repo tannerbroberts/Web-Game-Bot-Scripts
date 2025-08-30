@@ -1,7 +1,7 @@
 (function () {
   /*
    * generals.io Advanced Strategy Bookmarklet
-   * Press 'q' for auto-expand, 'g' for gather army, 'e' for lance exploration
+   * Press 'e' for auto-expand, 'g' for gather army, 'r' for reach exploration
    */
 
   // CONFIGURE YOUR PLAYER NAME HERE
@@ -9,6 +9,12 @@
 
   // Function to simulate a mouse click at the center of an element
   function simulateMouseClick(element) {
+    // Check if the element is already selected to avoid toggling half-army moves
+    if (element.classList.contains('selected')) {
+      console.log('Skipping click on already selected cell to avoid half-army toggle');
+      return;
+    }
+
     const rect = element.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
@@ -46,41 +52,99 @@
 
   // Visual indicator management system
   const activeIndicators = new Map(); // Maps listener names to their visual elements
+  const disabledListeners = new Set(); // Set to track permanently disabled listeners
 
   // Create a colored orb indicator
   function createIndicatorOrb(color, name) {
+    // Create container for orb and label
+    const container = document.createElement('div');
+    container.id = `generals-helper-container-${name}`;
+    container.style.cssText = `
+      position: fixed;
+      display: flex;
+      align-items: center;
+      z-index: 999999;
+      pointer-events: none;
+    `;
+
+    // Create the orb
     const orb = document.createElement('div');
     orb.id = `generals-helper-orb-${name}`;
     orb.style.cssText = `
-      position: fixed;
       width: 20px;
       height: 20px;
       border-radius: 50%;
       background-color: ${color};
       border: 3px solid #000000;
-      z-index: 999999;
       pointer-events: auto;
       cursor: pointer;
       transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: monospace;
+      font-weight: bold;
+      font-size: 12px;
+      color: #000000;
+      text-shadow: 1px 1px 1px rgba(255,255,255,0.8);
     `;
 
-    // Position orbs in the lower left corner, stacked vertically
+    // Add the appropriate letter based on the function name
+    let letter = '';
+    let label = '';
+    if (name === 'auto-expand') {
+      letter = 'E';
+      label = 'Expand';
+    } else if (name === 'gather') {
+      letter = 'G';
+      label = 'Gather';
+    } else if (name === 'lance') {
+      letter = 'R';
+      label = 'Reach';
+    }
+
+    orb.textContent = letter;
+
+    // Create the label
+    const labelElement = document.createElement('div');
+    labelElement.style.cssText = `
+      margin-left: 8px;
+      background-color: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+      white-space: nowrap;
+      pointer-events: none;
+    `;
+    labelElement.textContent = label;
+
+    // Position container in the lower left corner, stacked vertically
     const orbCount = activeIndicators.size;
-    orb.style.bottom = `${10 + (orbCount * 30)}px`;
-    orb.style.left = '10px';
+    container.style.bottom = `${10 + (orbCount * 35)}px`;
+    container.style.left = '10px';
 
-    // Add click handler to remove the listener
-    orb.addEventListener('click', () => unregisterListenerWithIndicator(name));
+    // Add click handler to remove the listener and prevent re-registration
+    orb.addEventListener('click', () => {
+      unregisterListenerWithIndicator(name);
+      disabledListeners.add(name);
+      console.log(`Permanently disabled listener: ${name}`);
+    });
 
-    document.body.appendChild(orb);
-    return orb;
+    // Assemble the components
+    container.appendChild(orb);
+    container.appendChild(labelElement);
+    document.body.appendChild(container);
+    
+    return container;
   }
 
   // Remove an indicator orb
   function removeIndicatorOrb(name) {
-    const orb = document.getElementById(`generals-helper-orb-${name}`);
-    if (orb) {
-      orb.remove();
+    const container = document.getElementById(`generals-helper-container-${name}`);
+    if (container) {
+      container.remove();
     }
   }
 
@@ -133,7 +197,7 @@
   function repositionOrbs() {
     let index = 0;
     for (const data of activeIndicators.values()) {
-      data.orb.style.bottom = `${10 + (index * 30)}px`;
+      data.orb.style.bottom = `${10 + (index * 35)}px`;
       index++;
     }
   }
@@ -260,84 +324,247 @@
     return document.querySelector('#gameMap td.selected');
   }
 
-  // Gather function - accumulates army from up to maxClicks adjacent cells
-  function performGather(maxClicks = 10) {
-    const myColor = findPlayerColor();
-    if (!myColor) return;
+  // Global state for gather operation
+  let isGatherActive = false;
+  let gatherCancelRequested = false;
+  let gatherIntervalId = null;
 
-    console.log(`Starting gather with max ${maxClicks} clicks`);
+  // Check if actions are queued by looking for center-horizontal or center-vertical indicators
+  function areActionsQueued() {
+    const indicators = document.querySelectorAll('td div.center-horizontal, td div.center-vertical');
+    return indicators.length > 0;
+  }
 
-    // Find the cell with the largest army as starting point
-    const myTerritories = document.querySelectorAll(`#gameMap td.${myColor}`);
-    let bestCell = null;
-    let bestArmyCount = 0;
+  // Find the player's largest army cell
+  function findLargestArmy(playerColor) {
+    const myTerritories = document.querySelectorAll(`#gameMap td.${playerColor}`);
+    let largestCell = null;
+    let maxArmies = 0;
 
-    for (const cell of myTerritories) {
-      const armyCount = getArmyCount(cell);
-      if (armyCount > bestArmyCount) {
-        bestArmyCount = armyCount;
-        bestCell = cell;
+    for (const territory of myTerritories) {
+      const armyCount = getArmyCount(territory);
+      if (armyCount > maxArmies) {
+        maxArmies = armyCount;
+        largestCell = territory;
       }
     }
 
-    if (!bestCell || bestArmyCount <= 1) {
-      console.log("Gather: No suitable starting cell found");
-      return;
-    }
-
-    // Start the recursive gathering
-    simulateMouseClick(bestCell);
-    console.log(`Gather: Starting from cell with ${bestArmyCount} armies`);
-
-    performGatherRecursive(bestCell, myColor, maxClicks - 1);
+    return largestCell;
   }
 
-  // Recursive gather function
-  function performGatherRecursive(currentCell, playerColor, remainingClicks) {
-    if (remainingClicks <= 0) return;
+  // Find the best target cell adjacent to a given cell
+  function findBestTarget(sourceCell, playerColor) {
+    if (!sourceCell) return null;
 
-    const coords = getCellCoords(currentCell);
-    const neighbors = getNeighbors(coords.row, coords.col);
-
-    // Find the neighbor with the most armies that belongs to the player
-    let bestNeighbor = null;
-    let bestArmyCount = 1; // Only consider neighbors with more than 1 army
+    const sourceCoords = getCellCoords(sourceCell);
+    const neighbors = getNeighbors(sourceCoords.row, sourceCoords.col);
+    
+    // Define directional priority: top, left, bottom, right
+    const directionPriorityMap = {
+      'up': 4,
+      'left': 3, 
+      'down': 2,
+      'right': 1
+    };
+    
+    let bestTarget = null;
+    let bestScore = -1;
+    let bestDirectionPriority = -1;
 
     for (const neighbor of neighbors) {
-      if (isPlayerCell(neighbor.cell, playerColor)) {
-        const armyCount = getArmyCount(neighbor.cell);
-        if (armyCount > bestArmyCount) {
-          bestArmyCount = armyCount;
-          bestNeighbor = neighbor;
+      const cell = neighbor.cell;
+      let score = -1;
+      
+      // Priority 1: Adjacent player cells with armies
+      if (isPlayerCell(cell, playerColor)) {
+        const armyCount = getArmyCount(cell);
+        if (armyCount > 0) {
+          score = 1000 + armyCount; // High priority, more armies = better
+        }
+      }
+      // Priority 2: Empty cells (cost 0)
+      else if (cell.className === '') {
+        score = 500; // Medium priority
+      }
+      // Priority 3: Enemy territories or cities (conquest cost)
+      else {
+        const conquestCost = getArmyCount(cell);
+        if (conquestCost >= 0) {
+          score = 100 - conquestCost; // Lower priority, less cost = better
+        }
+      }
+
+      // Check if this is a better choice
+      const currentDirectionPriority = directionPriorityMap[neighbor.direction] || 0;
+      const isBetterScore = score > bestScore;
+      const isSameScoreBetterDirection = (score === bestScore) && (currentDirectionPriority > bestDirectionPriority);
+      
+      if (isBetterScore || isSameScoreBetterDirection) {
+        bestScore = score;
+        bestTarget = cell;
+        bestDirectionPriority = currentDirectionPriority;
+        
+        if (score === bestScore && isSameScoreBetterDirection) {
+          console.log(`Gather: Tie-breaker - choosing ${neighbor.direction} direction`);
         }
       }
     }
 
-    if (bestNeighbor) {
-      console.log(`Gather: Clicking cell with ${bestArmyCount} armies`);
-      simulateMouseClick(bestNeighbor.cell);
+    return bestTarget;
+  }
 
-      // Continue gathering from the new position
-      setTimeout(() => {
-        performGatherRecursive(bestNeighbor.cell, playerColor, remainingClicks - 1);
-      }, 50); // Small delay to ensure the click is processed
-    } else {
-      console.log(`Gather: No more valid neighbors, finished with ${remainingClicks} clicks remaining`);
+  // Set orb size for visual feedback
+  function setGatherOrbSize(isActive) {
+    const gatherOrb = document.getElementById('generals-helper-orb-gather');
+    if (gatherOrb) {
+      if (isActive) {
+        gatherOrb.style.width = '40px';
+        gatherOrb.style.height = '40px';
+        gatherOrb.style.fontSize = '18px';
+      } else {
+        gatherOrb.style.width = '20px';
+        gatherOrb.style.height = '20px';
+        gatherOrb.style.fontSize = '12px';
+      }
     }
   }
 
-  // Lance function - explores dense fog areas
-  function performLance() {
+  // New gather function with updated behavior
+  async function performGather() {
+    const myColor = findPlayerColor();
+    if (!myColor) return;
+
+    // Prevent multiple gather operations from running simultaneously
+    if (isGatherActive) {
+      console.log("Gather: Already running, ignoring duplicate request");
+      return;
+    }
+
+    isGatherActive = true;
+    gatherCancelRequested = false;
+    console.log("Gather: Started - Press any key (except G) or click mouse to cancel");
+
+    // Set orb to double size
+    setGatherOrbSize(true);
+
+    // Add cancel listeners for keyboard and mouse
+    const cancelListener = (e) => {
+      // Ignore G key presses while gathering
+      if (e.key === 'g' || e.key === 'G') {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      // Don't cancel if typing in chat
+      if (document.activeElement.id === 'chatroom-input') {
+        return;
+      }
+      // Cancel on any other key
+      gatherCancelRequested = true;
+      console.log(`Gather: Canceled by '${e.key}' key`);
+      cleanupGather();
+      document.removeEventListener('keydown', cancelListener, { capture: true });
+      document.removeEventListener('mousedown', mouseListener, { capture: true });
+    };
+
+    const mouseListener = (e) => {
+      // Prevent the click from reaching the game to avoid creating new actions
+      e.preventDefault();
+      e.stopPropagation();
+      
+      gatherCancelRequested = true;
+      console.log("Gather: Canceled by mouse click");
+      cleanupGather();
+      document.removeEventListener('keydown', cancelListener, { capture: true });
+      document.removeEventListener('mousedown', mouseListener, { capture: true });
+    };
+
+    document.addEventListener('keydown', cancelListener, { capture: true });
+    document.addEventListener('mousedown', mouseListener, { capture: true });
+
+    // Start the infinite gather loop
+    const gatherLoop = async () => {
+      if (gatherCancelRequested) {
+        console.log("Gather: Loop canceled");
+        return;
+      }
+
+      // Wait for all actions to complete
+      while (areActionsQueued()) {
+        if (gatherCancelRequested) break;
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+
+      if (gatherCancelRequested) return;
+
+      // Find the largest army cell
+      const largestArmyCell = findLargestArmy(myColor);
+      if (largestArmyCell) {
+        const bestTarget = findBestTarget(largestArmyCell, myColor);
+        
+        if (bestTarget) {
+          const armyCount = getArmyCount(largestArmyCell);
+          console.log(`Gather: Moving ${armyCount} armies from largest cell to target`);
+          
+          // Only click source cell if it's not already selected (to avoid half-army toggle)
+          if (!largestArmyCell.classList.contains('selected')) {
+            simulateMouseClick(largestArmyCell);
+            await new Promise(resolve => setTimeout(resolve, 50));
+          } else {
+            console.log('Gather: Largest army cell already selected, proceeding to target');
+          }
+          
+          simulateMouseClick(bestTarget);
+          
+          // Wait for the action to queue
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+      }
+
+      // Schedule the next check in 100ms (only if not canceled)
+      if (!gatherCancelRequested) {
+        gatherIntervalId = setTimeout(gatherLoop, 100);
+      } else {
+        console.log("Gather: Loop termination - cancel requested");
+      }
+    };
+
+    // Start the loop
+    gatherLoop().catch(error => {
+      console.error('Gather: Error in loop:', error);
+      cleanupGather();
+      document.removeEventListener('keydown', cancelListener, { capture: true });
+      document.removeEventListener('mousedown', mouseListener, { capture: true });
+    });
+  }
+
+  // Cleanup function for gather
+  function cleanupGather() {
+    if (gatherIntervalId) {
+      clearTimeout(gatherIntervalId);
+      gatherIntervalId = null;
+    }
+    isGatherActive = false;
+    gatherCancelRequested = true; // Ensure this stays true to prevent race conditions
+    
+    // Reset orb size
+    setGatherOrbSize(false);
+    
+    console.log("Gather: Cleanup completed");
+  }
+
+  // Reach function - explores dense fog areas
+  function performReach() {
     const selectedCell = getSelectedCell();
     if (!selectedCell) {
-      console.log("Lance: No cell selected, please select a cell first");
+      console.log("Reach: No cell selected, please select a cell first");
       return;
     }
 
     const myColor = findPlayerColor();
     if (!myColor) return;
 
-    console.log("Lance: Starting fog exploration");
+    console.log("Reach: Starting fog exploration");
 
     // Build fog map
     const fogCells = document.querySelectorAll('#gameMap td.fog');
@@ -361,10 +588,10 @@
     const targetPath = findBestFogPath(selectedCell, fogMap, myColor);
 
     if (targetPath.length > 0) {
-      console.log(`Lance: Found path to dense fog with ${targetPath.length} moves`);
+      console.log(`Reach: Found path to dense fog with ${targetPath.length} moves`);
       executePath(targetPath);
     } else {
-      console.log("Lance: No suitable fog exploration path found");
+      console.log("Reach: No suitable fog exploration path found");
     }
   }
 
@@ -465,14 +692,14 @@
     path.forEach((cell, index) => {
       setTimeout(() => {
         simulateMouseClick(cell);
-        console.log(`Lance: Move ${index + 1}/${path.length}`);
+        console.log(`Reach: Move ${index + 1}/${path.length}`);
       }, index * 100); // Stagger the clicks
     });
   }
 
   // Event handler functions
   function autoExpandHandler(e) {
-    if (e.key !== 'q' || document.activeElement.id === 'chatroom-input') {
+    if (e.key !== 'e' || document.activeElement.id === 'chatroom-input') {
       return;
     }
     e.preventDefault();
@@ -484,18 +711,29 @@
     if (e.key !== 'g' || document.activeElement.id === 'chatroom-input') {
       return;
     }
+    
+    // Only activate if not already active
+    if (isGatherActive) {
+      return;
+    }
+    
     e.preventDefault();
     e.stopPropagation();
-    performGather();
+    
+    // Call the async gather function
+    performGather().catch(error => {
+      console.error('Gather: Error during execution:', error);
+      cleanupGather();
+    });
   }
 
-  function lanceHandler(e) {
-    if (e.key !== 'e' || document.activeElement.id === 'chatroom-input') {
+  function reachHandler(e) {
+    if (e.key !== 'r' || document.activeElement.id === 'chatroom-input') {
       return;
     }
     e.preventDefault();
     e.stopPropagation();
-    performLance();
+    performReach();
   }
 
   // Function to register all event listeners with visual indicators
@@ -518,12 +756,12 @@
       { capture: true }
     );
 
-    // Register lance (E key) with red indicator
+    // Register reach (R key) with red indicator
     registerListenerWithIndicator(
       'lance',
       '#ff0000', // Red color
       'keydown',
-      lanceHandler,
+      reachHandler,
       { capture: true }
     );
 
@@ -548,7 +786,7 @@
       'lance-backup',
       '#ff4040', // Light red
       'keydown',
-      lanceHandler,
+      reachHandler,
       { target: window, capture: true }
     );
   }
@@ -558,19 +796,19 @@
 
   // Periodically re-register the event listeners to ensure they stay active
   setInterval(function () {
-    // Only re-register if the listener doesn't exist
-    if (!activeIndicators.has('auto-expand')) {
+    // Only re-register if the listener doesn't exist and hasn't been permanently disabled
+    if (!activeIndicators.has('auto-expand') && !disabledListeners.has('auto-expand')) {
       registerListenerWithIndicator('auto-expand', '#0080ff', 'keydown', autoExpandHandler, { capture: true });
     }
-    if (!activeIndicators.has('gather')) {
+    if (!activeIndicators.has('gather') && !disabledListeners.has('gather')) {
       registerListenerWithIndicator('gather', '#00ff00', 'keydown', gatherHandler, { capture: true });
     }
-    if (!activeIndicators.has('lance')) {
-      registerListenerWithIndicator('lance', '#ff0000', 'keydown', lanceHandler, { capture: true });
+    if (!activeIndicators.has('lance') && !disabledListeners.has('lance')) {
+      registerListenerWithIndicator('lance', '#ff0000', 'keydown', reachHandler, { capture: true });
     }
   }, 1000); // Check every second
 
   console.log("Advanced Strategy: Script fully initialized with visual indicators");
-  console.log("Controls: Q = Auto-expand, G = Gather army, E = Lance exploration");
+  console.log("Controls: E = Auto-expand, G = Gather army, R = Reach exploration");
   console.log("Click orbs to disable functions");
 })();
