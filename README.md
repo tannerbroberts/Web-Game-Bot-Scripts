@@ -1,5 +1,5 @@
-# To get up and running:
-1. Copy the contents of bookmarklet.js from this repository
+# For all scripts:
+1. Copy the contents of GAME_SITE.js from this repository
 2. Open [this link](https://codepen.io/zvakanaka/full/LYgRwEp) in a new tab
 3. Paste the bookmarklet.js code into the source code section
 4. Make sure you have your bookmarks bar visible, this is going to run as a bookmarklet
