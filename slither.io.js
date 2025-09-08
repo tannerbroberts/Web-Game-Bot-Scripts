@@ -1,4 +1,15 @@
 (function () {
+  /**
+   * Explanation:
+   * 
+   * Clicking this bookmarklet does nothing other than register code that can be activated via other means...
+   * Now that I think about it... I really should make that bit more self-contained...
+   * Gee, I wish there were a way to automatically update my code in one spot and have it reflected everywhere...
+   * 
+   * Oh wait, I can totally do that with like a node script or something!
+   * 
+   * Yeah, I'll write the "hook me up to a clicklistener and unmount" code somewhere, and "import" it with the node script.
+   */
   // Constants
   const STATUS_ID = 'slither-status-line';
   const INITIAL_DEFAULT_MS = 15000; // default period if none set
@@ -56,6 +67,25 @@
     return { width, height };
   }
 
+  // Block native (user) mousemove events during circling so only synthetic ones we dispatch reach game listeners.
+  // We can't enumerate existing listeners portably; instead we stop propagation at capture phase for real events,
+  // letting through those we tag as synthetic.
+  let unblockNativeMouseMoves = null;
+  function blockNativeMouseMoves() {
+    if (unblockNativeMouseMoves) return;
+    const blocker = (e) => {
+      // Allow our injected events marked with slitherSynthetic
+      if (!e.slitherSynthetic) {
+        e.stopImmediatePropagation();
+      }
+    };
+    document.addEventListener('mousemove', blocker, true);
+    unblockNativeMouseMoves = () => {
+      document.removeEventListener('mousemove', blocker, true);
+      unblockNativeMouseMoves = null;
+    };
+  }
+
   function startAnimation() {
     const { width, height } = getViewportDimensions();
     const diameter = height / 2;
@@ -67,8 +97,8 @@
     const statusEl = getOrCreateStatusEl();
     let statusIntervalId = null;
     function updateStatus() {
-      const defaultMs = Number(document.slither && document.slither.defaultPeriodMs) || INITIAL_DEFAULT_MS;
-      const raw = Number(document.slither && document.slither.periodMs);
+      const defaultMs = Number(document.slither?.defaultPeriodMs) || INITIAL_DEFAULT_MS;
+      const raw = Number(document.slither?.periodMs);
       const p = Math.max(MIN_PERIOD_RUNTIME_MS, Number.isFinite(raw) ? raw : defaultMs);
       statusEl.textContent = `Period: ${formatPeriod(p)}`;
     }
@@ -87,8 +117,8 @@
       lastTime = currentTime;
 
       // Read the current period and default from document.slither
-      const defaultMs = Number(document.slither && document.slither.defaultPeriodMs) || INITIAL_DEFAULT_MS;
-      const rawPeriod = Number(document.slither && document.slither.periodMs);
+  const defaultMs = Number(document.slither?.defaultPeriodMs) || INITIAL_DEFAULT_MS;
+  const rawPeriod = Number(document.slither?.periodMs);
       const periodMs = Math.max(MIN_PERIOD_RUNTIME_MS, Number.isFinite(rawPeriod) ? rawPeriod : defaultMs);
 
   // Update the period with scaled drift based on current period (bounded)
@@ -103,12 +133,10 @@
       const mouseX = centerX + radius * Math.cos(angle);
       const mouseY = centerY + radius * Math.sin(angle);
 
-      const event = new MouseEvent('mousemove', {
-        clientX: mouseX,
-        clientY: mouseY,
-        bubbles: true
-      });
-      document.dispatchEvent(event);
+  const event = new MouseEvent('mousemove', { clientX: mouseX, clientY: mouseY, bubbles: true });
+  // Tag event so the blocker lets it through
+  event.slitherSynthetic = true;
+  document.dispatchEvent(event);
       animationFrameId = requestAnimationFrame(animate);
     }
 
@@ -117,8 +145,8 @@
       isMounted = false;
       if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
       if (statusIntervalId !== null) clearInterval(statusIntervalId);
-      const el = document.getElementById(STATUS_ID);
-      if (el && el.parentNode) el.parentNode.removeChild(el);
+  const el = document.getElementById(STATUS_ID);
+  if (el?.parentNode) el.parentNode.removeChild(el);
     };
   }
 
@@ -140,7 +168,7 @@
   function handleWheel(e) {
     // Scroll down -> slower (increase period), Scroll up -> faster (decrease period)
     const dir = Math.sign(e.deltaY);
-    const currentDefault = Number(document.slither && document.slither.defaultPeriodMs) || INITIAL_DEFAULT_MS;
+  const currentDefault = Number(document.slither?.defaultPeriodMs) || INITIAL_DEFAULT_MS;
     const nextDefault = Math.max(MIN_PERIOD_RUNTIME_MS, currentDefault + dir * WHEEL_STEP_MS);
     document.slither.defaultPeriodMs = nextDefault;
     // Also nudge the live period toward the new default for immediate effect
@@ -154,29 +182,27 @@
   function rightClickToStart(e) {
     const isRightClick = e.type === 'contextmenu' || (e.type === 'mousedown' && e.button === 2);
     if (!isRightClick) return;
-    // Avoid opening the context menu when used to start the animation
     if (e.type === 'contextmenu') e.preventDefault();
-    if (runningCleanup) return; // already running
+    if (runningCleanup) return;
 
+    blockNativeMouseMoves();
     runningCleanup = startAnimation();
-    // Only start once per run; re-enable on stop
     document.removeEventListener('contextmenu', rightClickToStart);
     document.removeEventListener('mousedown', rightClickToStart);
 
     function stopOnLeftClick(ev) {
+      if (ev.button !== 0) return;
       if (!runningCleanup) return;
       runningCleanup();
       runningCleanup = null;
+      if (unblockNativeMouseMoves) unblockNativeMouseMoves();
       document.removeEventListener('click', stopOnLeftClick);
-      // Allow another right click to start again
       document.addEventListener('contextmenu', rightClickToStart);
       document.addEventListener('mousedown', rightClickToStart);
     }
-    // Any left-click will stop the animation
     document.addEventListener('click', stopOnLeftClick);
   }
 
-  // Listen for right-click via contextmenu (primary) and mousedown fallback
   document.addEventListener('contextmenu', rightClickToStart);
   document.addEventListener('mousedown', rightClickToStart);
 })();
