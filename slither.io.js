@@ -1,22 +1,11 @@
 (function () {
-  /**
-   * Explanation:
-   * 
-   * Clicking this bookmarklet does nothing other than register code that can be activated via other means...
-   * Now that I think about it... I really should make that bit more self-contained...
-   * Gee, I wish there were a way to automatically update my code in one spot and have it reflected everywhere...
-   * 
-   * Oh wait, I can totally do that with like a node script or something!
-   * 
-   * Yeah, I'll write the "hook me up to a clicklistener and unmount" code somewhere, and "import" it with the node script.
-   */
   // Constants
   const STATUS_ID = 'slither-status-line';
   const INITIAL_DEFAULT_MS = 15000; // default period if none set
-  const MIN_PERIOD_RUNTIME_MS = 2000; // min used for status display and wheel control
+  const MIN_PERIOD_RUNTIME_MS = 4000; // min used for status display and wheel control
   const WHEEL_STEP_MS = 1000; // ms change per wheel notch
   // Period drift scaling: at 15000ms keep ~-0.1 ms/ms, at 2000ms increase to ~-1.5 ms/ms
-  const PERIOD_ACCEL_BASE = -0.1; // drift (ms change per ms) at INITIAL_DEFAULT_MS
+  const PERIOD_ACCEL_BASE = -0.07; // drift (ms change per ms) at INITIAL_DEFAULT_MS
   const PERIOD_ACCEL_TARGET_AT_2000 = -0.15; // desired drift when period ≈ 2000ms
   const PERIOD_ACCEL_EXP = Math.log(Math.abs(PERIOD_ACCEL_TARGET_AT_2000 / PERIOD_ACCEL_BASE)) / Math.log(INITIAL_DEFAULT_MS / 2000);
   function computePeriodAcceleration(periodMs) {
@@ -27,6 +16,7 @@
   }
   const STATUS_UPDATE_INTERVAL_MS = 1000; // status line update cadence
   const TWO_PI = 2 * Math.PI;
+  const BOOST_ANGULAR_MULTIPLIER = 1.6; // factor to multiply angular speed while spacebar boost is active
 
   // Utility: format the period nicely for display
   function formatPeriod(periodMs) {
@@ -86,7 +76,7 @@
     };
   }
 
-  function startAnimation() {
+  function startAnimation(startMouseX, startMouseY) {
     const { width, height } = getViewportDimensions();
     const diameter = height / 2;
     const radius = diameter / 2;
@@ -107,7 +97,15 @@
 
     let animationFrameId = null;
     let isMounted = true;
-    let angle = 0; // current angle in radians
+    // Initial angle aligns with vector from center to mouse at activation (default 0 if unavailable or at center)
+    let angle = 0;
+    if (Number.isFinite(startMouseX) && Number.isFinite(startMouseY)) {
+      const dx = startMouseX - centerX;
+      const dy = startMouseY - centerY;
+      if (dx !== 0 || dy !== 0) {
+        angle = Math.atan2(dy, dx);
+      }
+    }
     let lastTime = performance.now(); // last frame timestamp (ms)
 
     function animate(currentTime) {
@@ -127,8 +125,10 @@
       if (!document.slither) document.slither = {};
       document.slither.periodMs = newPeriod;
 
-      // Advance angle using instantaneous angular velocity: dθ = 2π * (dt / P(t))
-      angle += TWO_PI * (dt / periodMs);
+  // Advance angle using instantaneous angular velocity: dθ = 2π * (dt / P(t))
+  // If boosting (spacebar held) we multiply angular speed to keep circle size consistent while snake speeds up.
+  const boostMult = document.slither?.boostActive ? BOOST_ANGULAR_MULTIPLIER : 1;
+  angle += TWO_PI * (dt / periodMs) * boostMult;
 
       const mouseX = centerX + radius * Math.cos(angle);
       const mouseY = centerY + radius * Math.sin(angle);
@@ -169,10 +169,14 @@
     // Scroll down -> slower (increase period), Scroll up -> faster (decrease period)
     const dir = Math.sign(e.deltaY);
   const currentDefault = Number(document.slither?.defaultPeriodMs) || INITIAL_DEFAULT_MS;
-    const nextDefault = Math.max(MIN_PERIOD_RUNTIME_MS, currentDefault + dir * WHEEL_STEP_MS);
-    document.slither.defaultPeriodMs = nextDefault;
+    const rawNext = currentDefault + dir * WHEEL_STEP_MS;
+    // Always snap to the nearest 1000ms increment (using WHEEL_STEP_MS as the quantum)
+    let snapped = Math.round(rawNext / WHEEL_STEP_MS) * WHEEL_STEP_MS;
+    // Enforce minimum (still keeps a multiple since MIN is 4000)
+    snapped = Math.max(MIN_PERIOD_RUNTIME_MS, snapped);
+    document.slither.defaultPeriodMs = snapped;
     // Also nudge the live period toward the new default for immediate effect
-    document.slither.periodMs = nextDefault;
+    document.slither.periodMs = snapped;
   }
   // Passive so we don't block page scrolling
   document.addEventListener('wheel', handleWheel, { passive: true });
@@ -186,7 +190,7 @@
     if (runningCleanup) return;
 
     blockNativeMouseMoves();
-    runningCleanup = startAnimation();
+  runningCleanup = startAnimation(e.clientX, e.clientY);
     document.removeEventListener('contextmenu', rightClickToStart);
     document.removeEventListener('mousedown', rightClickToStart);
 
@@ -205,4 +209,20 @@
 
   document.addEventListener('contextmenu', rightClickToStart);
   document.addEventListener('mousedown', rightClickToStart);
+
+  // Track spacebar state to adjust angular speed while boosting
+  function handleKeyDown(e) {
+    if (e.code === 'Space' || e.key === ' ') {
+      if (!document.slither) document.slither = {};
+      document.slither.boostActive = true;
+    }
+  }
+  function handleKeyUp(e) {
+    if (e.code === 'Space' || e.key === ' ') {
+      if (!document.slither) document.slither = {};
+      document.slither.boostActive = false;
+    }
+  }
+  document.addEventListener('keydown', handleKeyDown, true);
+  document.addEventListener('keyup', handleKeyUp, true);
 })();
